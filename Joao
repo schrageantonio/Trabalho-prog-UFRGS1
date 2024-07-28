@@ -1,0 +1,318 @@
+#include "raylib.h"
+#include <stdio.h>
+#include <stdlib.h>
+
+#define LARGURA 1200
+#define ALTURA 600
+#define LADO 20
+#define MAX_LINHAS 30
+#define MAX_COLUNAS 60
+
+
+char mapa[MAX_LINHAS][MAX_COLUNAS];
+int PosicaoJogadorX=-1;
+int PosicaoJogadorY=-1;
+
+int PosMonstro1X=-1;
+int PosMonstro1Y=-1;
+
+int PosMonstro2X=-1;
+int PosMonstro2Y=-1;
+
+int PosMonstro3X=-1;
+int PosMonstro3Y=-1;
+
+int framesParaMoverMonstro = 0;
+int intervaloMovimentoMonstro = 15;  // Ajuste esse valor para controlar a velocidade dos monstros
+
+
+int dx=0, dy=0;
+int dxM1=0, dyM1=0, dxM2=0, dyM2=0, dxM3=0, dyM3=0;
+
+int direcaoMovimentoMonstro(){
+    int dM = GetRandomValue(-1,1);
+    return dM;
+}
+
+int deveMoverMonstro(int x, int y, int dx, int dy, int larg, int alt) {
+    int novaPosicaoX = x + dx * LADO;
+    int novaPosicaoY = y + dy * LADO;
+
+    // Verifica se a nova posição está dentro dos limites do mapa
+    if (novaPosicaoX < 0 || novaPosicaoX >= larg || novaPosicaoY < 0 || novaPosicaoY >= alt) {
+        return 0; // Movimento fora dos limites do mapa
+    }
+
+    // Verifica se a nova posição não é uma parede
+    if (mapa[novaPosicaoY / LADO][novaPosicaoX / LADO] == 'W') {
+        return 0; // Movimento para uma parede
+    }
+
+    return 1; // Pode mover para a nova posição
+}
+
+void moveMonstro(int dxM, int dyM, int *xM, int *yM) {
+    *xM += dxM * LADO;
+    *yM += dyM * LADO;
+}
+
+
+void lerMapa(const char *nomeArquivo)
+{
+    FILE *file = fopen(nomeArquivo, "r"); // ponteiro  *file do TIPO FILE recebe leitura do arquivo, "r" Abre um arquivo texto para leitura. O arquivo deve existir antes de ser aberto.
+    if (file == NULL)
+    {
+        printf("Erro ao abrir o arquivo %s\n", nomeArquivo);
+        exit(1);
+    }
+
+    int linha = 0;
+    int coluna = 0;
+    while (linha < MAX_LINHAS && coluna < MAX_COLUNAS)
+    {
+        int c = fgetc(file); //esta função já passa a apontar para o próximo caractere, automaticamente, até encontrar -1 (EOF).
+
+        if (c == EOF) // fim do arquivo
+        {
+            break;
+        }
+        if (c == '\n')
+        {
+            linha++;
+            coluna = 0;
+        }
+        else
+        {
+            mapa[linha][coluna] = c;
+            if (c=='J') //não esta ficando no lugar do J, coloquei posição fixa (40,40) ate ajustarmos
+            {
+                PosicaoJogadorX= 40;
+                PosicaoJogadorY= 40;
+            }
+            if (c=='M')
+            {
+                PosMonstro1X=coluna*20;
+                PosMonstro1Y=linha*20;
+
+                PosMonstro2X= 1100;
+                PosMonstro2Y= 20;
+
+                PosMonstro3X=400;
+                PosMonstro3Y=40;
+            }
+            coluna++;
+        }
+    }
+
+    fclose(file);
+}
+
+void desenharMapa()
+{
+    for (int i = 0; i < MAX_LINHAS; i++)
+    {
+        for (int j = 0; j < MAX_COLUNAS; j++)
+        {
+            Color cor; //variavel cor do TIPO COR (esse tipo é existente na biblioteca Rayllib)
+
+            switch (mapa[i][j])
+            {
+            case 'W':
+                cor = DARKGRAY;
+                break;      // Jogador
+            //case 'M':
+              //  cor = BLUE;
+                //break;       // Inimigo
+            case 'R':
+                cor = RED;
+                break;     // Recurso
+            case 'H':
+                cor = GREEN;
+                break;     // Buraco
+            case 'S':
+                cor = YELLOW;
+                break;    // Base
+            default:
+                cor = LIGHTGRAY;
+                break;      // Espaço em branco
+            }
+
+            DrawRectangle(j * 20, i * 20, 20, 20, cor);
+        }
+    }
+}
+
+
+
+
+
+
+int deveMover(int x, int y,int dx, int dy, int larg, int alt){
+
+    if (dx == 1) { // Movimento para a direita
+        // Verifica se não ultrapassa os limites do mapa
+        if (x + LADO < larg) {
+            // Verifica se a próxima posição não é uma parede
+            if (mapa[y / LADO][x / LADO + 1] != 'W') {
+                return 1;
+            }
+        }
+    }
+
+    if(dx == -1){ // Movimento para a esquerda
+        // Verifica se não ultrapassa os limites do mapa
+        if (x - LADO > 0) {
+            // Verifica se a próxima posição não é uma parede
+            if (mapa[y / LADO][x / LADO -1 ] != 'W') {
+                return 1;
+            }
+        }
+    }
+
+    if(dy == 1){ // Movimento para cima
+        if (y < ALTURA) {
+            // Verifica se a próxima posição não é uma parede
+            if (mapa[y / LADO + 1][x / LADO] != 'W') {
+                return 1;
+            }
+        }
+    }
+
+    if(dy == -1){ // Movimento para baixo
+        if (y + LADO > 0) {
+            // Verifica se a próxima posição não é uma parede
+            if (mapa[y / LADO- 1][x / LADO] != 'W') {
+                return 1;
+            }
+        }
+    }else{
+        return 0;
+    }
+
+}
+
+void move(int dx, int dy, int *x, int *y){
+    if(dx == 1){
+        *x+=20;
+    }
+    if(dx == -1){
+        *x-=20;
+    }
+    if(dy == 1){
+        *y+=20;
+    }
+    if(dy == -1){
+        *y-=20;
+    }
+    if(dy == 0){
+        *y=*y;
+    }
+    if(dx == 0){
+        *x=*x;
+    }
+}
+
+int main()
+{
+    // Inicializa a janela
+    InitWindow(1200, 600, "Jogo Tower Defense");
+
+    // Ler o mapa do arquivo
+    lerMapa("mapa1.txt");
+
+    SetTargetFPS(60);
+
+    while (!WindowShouldClose())
+    {
+
+        if (IsKeyPressed(KEY_RIGHT)){
+            dx = 1;
+            if(deveMover(PosicaoJogadorX, PosicaoJogadorY, dx, dy, LARGURA, ALTURA)== 1){
+                move(dx, 0, &PosicaoJogadorX, &PosicaoJogadorY);
+                dx=0;
+            }
+        }
+
+        if (IsKeyPressed(KEY_LEFT)){
+            dx = -1;
+            if(deveMover(PosicaoJogadorX, PosicaoJogadorY, dx, dy, LARGURA, ALTURA)== 1){
+                move(dx, 0, &PosicaoJogadorX, &PosicaoJogadorY);
+                dx=0;
+            }
+        }
+
+
+        if (IsKeyPressed(KEY_UP)){
+            dy = -1;
+            if(deveMover(PosicaoJogadorX, PosicaoJogadorY, dx, dy, LARGURA, ALTURA)== 1){
+                move(0, dy, &PosicaoJogadorX, &PosicaoJogadorY);
+                dy=0;
+            }
+        }
+
+        if (IsKeyPressed(KEY_DOWN)){
+
+            dy = 1;
+            if(deveMover(PosicaoJogadorX, PosicaoJogadorY, dx, dy, LARGURA, ALTURA)== 1){
+                move(0, dy, &PosicaoJogadorX, &PosicaoJogadorY);
+                dy=0;
+            }
+        }
+
+        if (IsKeyPressed(KEY_DOWN)){
+
+            dy = 1;
+            if(deveMover(PosicaoJogadorX, PosicaoJogadorY, dx, dy, LARGURA, ALTURA)== 1){
+                move(0, dy, &PosicaoJogadorX, &PosicaoJogadorY);
+                dy=0;
+            }
+        }
+
+
+        framesParaMoverMonstro++;
+        if (framesParaMoverMonstro >= intervaloMovimentoMonstro) {
+            dxM1 = direcaoMovimentoMonstro();
+            dyM1 = direcaoMovimentoMonstro();
+
+            if (deveMoverMonstro(PosMonstro1X, PosMonstro1Y, dxM1, dyM1, LARGURA, ALTURA) == 1) {
+                moveMonstro(dxM1, dyM1, &PosMonstro1X, &PosMonstro1Y);
+            }
+
+            dxM2 = direcaoMovimentoMonstro();
+            dyM2 = direcaoMovimentoMonstro();
+
+            if (deveMoverMonstro(PosMonstro2X, PosMonstro2Y, dxM2, dyM2, LARGURA, ALTURA) == 1) {
+                moveMonstro(dxM2, dyM2, &PosMonstro2X, &PosMonstro2Y);
+            }
+
+            dxM3 = direcaoMovimentoMonstro();
+            dyM3 = direcaoMovimentoMonstro();
+
+            if (deveMoverMonstro(PosMonstro3X, PosMonstro3Y, dxM3, dyM3, LARGURA, ALTURA) == 1) {
+                moveMonstro(dxM3, dyM3, &PosMonstro3X, &PosMonstro3Y);
+            }
+
+            framesParaMoverMonstro = 0;  // Reinicia o contador de frames
+        }
+
+
+
+        BeginDrawing();
+        ClearBackground(GREEN);
+
+
+        // Desenhar o mapa
+        desenharMapa();
+        DrawRectangle(PosicaoJogadorX, PosicaoJogadorY, LADO, LADO, WHITE);
+        DrawRectangle(PosMonstro1X, PosMonstro1Y, LADO, LADO, BLUE);
+        DrawRectangle(PosMonstro2X, PosMonstro2Y, LADO, LADO, BLUE);
+        DrawRectangle(PosMonstro3X, PosMonstro3Y, LADO, LADO, BLUE);
+
+        EndDrawing();
+    }
+
+    CloseWindow();
+
+    return 0;
+}
+

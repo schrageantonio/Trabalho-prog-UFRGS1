@@ -1,0 +1,211 @@
+#include "raylib.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+
+#define LARGURA 1200
+#define ALTURA 600
+#define LADO 20
+#define MAX_LINHAS 30
+#define MAX_COLUNAS 60
+#define MAX_INIMIGOS 10
+
+// Estruturas e variáveis globais
+char mapa[MAX_LINHAS][MAX_COLUNAS];  // Mapa do jogo
+int posicao_jogador_x = -1;          // Posição X inicial do jogador
+int posicao_jogador_y = -1;          // Posição Y inicial do jogador
+int recursos_jogador = 0;            // Quantidade de recursos que o jogador possui
+
+int frames_para_mover_monstro = 0;   //Contador de frames para movimentação dos monstros
+int intervalo_movimento_monstro = 10; //Intervalo de frames para movimentar os monstros (10 porque se nao muito rapido, mas alterável
+
+//Posições x e y do inimigo juntamente com seus deslocamentos dx e dy
+typedef struct {
+    int x;
+    int y;
+    int dx;
+    int dy;
+} inimigo;
+
+//Função para redefinir o deslocamento do inimigo
+void redefine_deslocamento(inimigo *inimigo) {
+    do {
+        //Define deslocamento aleatório (pode ser -LADO, 0 ou LADO)
+        inimigo->dx = (GetRandomValue(-1, 1)) * LADO;
+        inimigo->dy = (GetRandomValue(-1, 1)) * LADO;
+    } while (inimigo->dx == 0 && inimigo->dy == 0); //Garante que pelo menos um deslocamento não é zero (porque se nao fica parado por muito tempo)
+}
+
+// Função para inicializar as posições dos inimigos
+void inicializa_posicao(inimigo *inimigo) {
+    //Define a posição aleatória do inimigo dentro dos limites da tela
+    inimigo->x = GetRandomValue(0, LARGURA / LADO - 1) * LADO;
+    inimigo->y = GetRandomValue(0, ALTURA / LADO - 1) * LADO;
+}
+
+//Função para mover o inimigo
+int move_inimigo(inimigo *inimigo, int largura, int altura) {
+    int novo_x = inimigo->x + inimigo->dx;
+    int novo_y = inimigo->y + inimigo->dy;
+
+    //Verifica se a nova posição não é uma parede
+    if (mapa[novo_y / LADO][novo_x / LADO] == 'W') {
+        return 0; //Movimento pra alguma parede
+    }
+
+    //Verifica se a nova posição está dentro dos limites
+    if (novo_x >= 0 && novo_x < largura && novo_y >= 0 && novo_y < altura) {
+        inimigo->x = novo_x;
+        inimigo->y = novo_y;
+        return 1; //Movimento correto
+    }
+    return 0; //Movimento que não deu certo
+}
+
+//Função que lê o mapa
+void ler_mapa(const char *nome_arquivo) {
+    FILE *file = fopen(nome_arquivo, "r");
+    if (file == NULL) {
+        printf("Erro ao abrir o arquivo %s\n", nome_arquivo);
+        exit(1);
+    }
+
+    int linha = 0, coluna = 0;
+    while (linha < MAX_LINHAS && coluna < MAX_COLUNAS) {
+        int c = fgetc(file);
+        if (c == EOF) break;
+        if (c == '\n') {
+            linha++;
+            coluna = 0;
+        } else {
+            mapa[linha][coluna] = c;
+            if (c == 'J') {
+                //Inicializa a posição do jogador quando encontrado no mapa
+                posicao_jogador_x = coluna * LADO;
+                posicao_jogador_y = linha * LADO;
+            }
+            coluna++;
+        }
+    }
+
+    fclose(file);
+}
+
+//Função para "desenhar" o mapa na tela
+void desenhar_mapa() {
+    for (int i = 0; i < MAX_LINHAS; i++) {
+        for (int j = 0; j < MAX_COLUNAS; j++) {
+            Color cor;
+            switch (mapa[i][j]) {
+                case 'W': cor = DARKGRAY; break; // Parede
+                case 'R': cor = RED; break;      // Recurso
+                case 'H': cor = GREEN; break;    // Buraco
+                case 'S': cor = YELLOW; break;   // Base
+                default: cor = LIGHTGRAY; break; // Espaço em branco
+            }
+            DrawRectangle(j * LADO, i * LADO, LADO, LADO, cor);
+        }
+    }
+}
+
+//Função para verificar se o Jogador pode se mover
+int deve_mover(int x, int y, int dx, int dy, int larg, int alt) {
+    if (dx == 1 && x + LADO < larg && mapa[y / LADO][x / LADO + 1] != 'W') return 1;
+    if (dx == -1 && x - LADO >= 0 && mapa[y / LADO][x / LADO - 1] != 'W') return 1;
+    if (dy == 1 && y + LADO < alt && mapa[y / LADO + 1][x / LADO] != 'W') return 1;
+    if (dy == -1 && y - LADO >= 0 && mapa[y / LADO - 1][x / LADO] != 'W') return 1;
+    return 0;
+}
+
+//Função para mover o Jogador
+void move(int dx, int dy, int *x, int *y) {
+    *x += dx * LADO;
+    *y += dy * LADO;
+}
+
+//Função para pegar recursos
+void pegar_recurso(int x, int y) {
+    //Verifica a posição do recurso no mapa
+    int col = x / LADO;
+    int lin = y / LADO;
+
+    //Verifica se a posição contém um recurso
+    if (mapa[lin][col] == 'R') {
+        recursos_jogador++;  // Incrementa o contador de recursos do jogador
+        mapa[lin][col] = ' '; // Remove o recurso do mapa
+    }
+}
+
+int main() {
+    //Inicializa a janela do jogo
+    InitWindow(LARGURA, ALTURA, "Jogo Tower Defense");
+
+    //Ler o mapa do arquivo
+    ler_mapa("mapa1.txt");
+
+    //FPS do game
+    SetTargetFPS(45);
+
+    //Inicializa a semente para a geração de números aleatórios
+    srand(time(NULL));
+
+    //Cria e inicializa os inimigos
+    inimigo inimigos[MAX_INIMIGOS];
+    for (int i = 0; i < MAX_INIMIGOS; i++) {
+        inicializa_posicao(&inimigos[i]);
+        redefine_deslocamento(&inimigos[i]);
+    }
+
+    //Loop principal do jogo
+    while (!WindowShouldClose()) {
+        int dx = 0, dy = 0;
+
+        //Movimento do Jogador
+        if (IsKeyPressed(KEY_RIGHT)) dx = 1;
+        if (IsKeyPressed(KEY_LEFT)) dx = -1;
+        if (IsKeyPressed(KEY_UP)) dy = -1;
+        if (IsKeyPressed(KEY_DOWN)) dy = 1;
+
+        //Verifica se o movimento é válido e move o jogador
+        if (deve_mover(posicao_jogador_x, posicao_jogador_y, dx, dy, LARGURA, ALTURA)) {
+            move(dx, dy, &posicao_jogador_x, &posicao_jogador_y);
+            pegar_recurso(posicao_jogador_x, posicao_jogador_y); // Verifica se o jogador pega um recurso
+        }
+
+        //Atualiza os inimigos
+        frames_para_mover_monstro++;
+        if (frames_para_mover_monstro >= intervalo_movimento_monstro) {
+            for (int i = 0; i < MAX_INIMIGOS; i++) {
+                if (!move_inimigo(&inimigos[i], LARGURA, ALTURA)) {
+                    redefine_deslocamento(&inimigos[i]);
+                }
+            }
+            frames_para_mover_monstro = 0;
+        }
+
+        //Inicia o Desenho
+        BeginDrawing();
+        ClearBackground(GREEN);
+
+        //"Desenha" o mapa
+        desenhar_mapa();
+
+        // "Desenha o Jogador
+        DrawRectangle(posicao_jogador_x, posicao_jogador_y, LADO, LADO, WHITE);
+
+        //"Desenha" os inimigos
+        for (int i = 0; i < MAX_INIMIGOS; i++) {
+            DrawRectangle(inimigos[i].x, inimigos[i].y, LADO, LADO, BLUE);
+        }
+
+        //Mostra a quantidade de recursos na tela
+        DrawText(TextFormat("Recursos: %d", recursos_jogador), 10, 10, 20, BLACK);
+
+        EndDrawing();
+    }
+
+
+    CloseWindow();
+
+    return 0;
+}
